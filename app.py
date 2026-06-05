@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# 회원 테이블 (탈퇴 예약 포함)
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -18,7 +17,6 @@ CREATE TABLE IF NOT EXISTS users (
 )
 """)
 
-# 로그인 상태 저장
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS app_state (
     key TEXT PRIMARY KEY,
@@ -30,11 +28,10 @@ conn.commit()
 
 
 # -----------------------------
-# 자동 삭제 처리 (7일 지난 계정 삭제)
+# 자동 삭제
 # -----------------------------
 def cleanup_deleted_users():
     now = datetime.now().isoformat()
-
     cursor.execute(
         "DELETE FROM users WHERE delete_at IS NOT NULL AND delete_at < ?",
         (now,)
@@ -43,7 +40,7 @@ def cleanup_deleted_users():
 
 
 # -----------------------------
-# 현재 로그인 사용자
+# 현재 로그인 유저
 # -----------------------------
 def get_current_user():
     cursor.execute(
@@ -67,7 +64,7 @@ def request_delete(user_id):
 
 
 # -----------------------------
-# 앱 시작
+# 앱
 # -----------------------------
 def main(page: ft.Page):
     page.title = "리메지코드"
@@ -79,27 +76,22 @@ def main(page: ft.Page):
 
     cleanup_deleted_users()
 
-    # -----------------------------
-    # 알림
-    # -----------------------------
     def alert(title, msg):
         page.open(ft.AlertDialog(title=ft.Text(title), content=ft.Text(msg)))
 
     # -----------------------------
-    # 화면 전환
+    # 화면 전환 (핵심 수정)
     # -----------------------------
     def change_view(view):
         container.content = build_view(view)
-        page.update()
+        container.update()   # ⭐ 핵심 수정 (page.update ❌)
 
     # -----------------------------
-    # 화면 구성
+    # 화면
     # -----------------------------
     def build_view(view):
 
-        # -------------------------
-        # 로고
-        # -------------------------
+        # ----------------- 로고 -----------------
         if view == "logo":
 
             def go(e):
@@ -117,12 +109,11 @@ def main(page: ft.Page):
                     alignment="center",
                     horizontal_alignment="center"
                 ),
-                on_tap=go
+                on_tap=go,
+                on_click=go   # ⭐ 추가 (중요)
             )
 
-        # -------------------------
-        # 로그인
-        # -------------------------
+        # ----------------- 로그인 -----------------
         elif view == "login":
 
             id_f = ft.TextField(label="아이디")
@@ -136,7 +127,6 @@ def main(page: ft.Page):
                 user = cursor.fetchone()
 
                 if user:
-                    # 탈퇴 예약 체크
                     if user[3] is not None:
                         alert("탈퇴 진행중", "이미 탈퇴 예약된 계정입니다.")
                         return
@@ -148,7 +138,6 @@ def main(page: ft.Page):
                     conn.commit()
 
                     change_view("main")
-
                 else:
                     alert("로그인 실패", "아이디 또는 비밀번호 오류")
 
@@ -163,9 +152,7 @@ def main(page: ft.Page):
                 alignment="center"
             )
 
-        # -------------------------
-        # 회원가입
-        # -------------------------
+        # ----------------- 회원가입 -----------------
         elif view == "signup":
 
             email_f = ft.TextField(label="이메일")
@@ -202,9 +189,7 @@ def main(page: ft.Page):
                 alignment="center"
             )
 
-        # -------------------------
-        # 메인
-        # -------------------------
+        # ----------------- 메인 -----------------
         elif view == "main":
 
             user = get_current_user()
@@ -224,13 +209,8 @@ def main(page: ft.Page):
                 [
                     ft.Text("메인 화면", size=30),
                     ft.Text(f"{user}님 환영합니다"),
-
                     ft.ElevatedButton("로그아웃", on_click=logout),
-
-                    ft.ElevatedButton(
-                        "회원 탈퇴 (7일 후 삭제)",
-                        on_click=delete_account
-                    )
+                    ft.ElevatedButton("회원 탈퇴 (7일 후 삭제)", on_click=delete_account)
                 ],
                 alignment="center"
             )
