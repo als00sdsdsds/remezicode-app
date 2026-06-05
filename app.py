@@ -109,8 +109,7 @@ def main(page: ft.Page):
                     alignment="center",
                     horizontal_alignment="center"
                 ),
-                on_tap=go,
-                on_click=go   # ⭐ 추가 (중요)
+                on_tap=go,   # ⭐ 추가 (중요)
             )
 
         # ----------------- 로그인 -----------------
