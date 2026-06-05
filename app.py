@@ -1,160 +1,195 @@
 import flet as ft
 import sqlite3
+from datetime import datetime, timedelta
 
 # -----------------------------
-# 데이터베이스 초기화
+# DB 설정
 # -----------------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
 
+# 회원 테이블 (탈퇴 예약 포함)
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     password TEXT NOT NULL,
-    email TEXT
+    email TEXT,
+    delete_at TEXT
 )
 """)
+
+# 로그인 상태 저장
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS app_state (
+    key TEXT PRIMARY KEY,
+    value TEXT
+)
+""")
+
 conn.commit()
 
 
+# -----------------------------
+# 자동 삭제 처리 (7일 지난 계정 삭제)
+# -----------------------------
+def cleanup_deleted_users():
+    now = datetime.now().isoformat()
+
+    cursor.execute(
+        "DELETE FROM users WHERE delete_at IS NOT NULL AND delete_at < ?",
+        (now,)
+    )
+    conn.commit()
+
+
+# -----------------------------
+# 현재 로그인 사용자
+# -----------------------------
+def get_current_user():
+    cursor.execute(
+        "SELECT value FROM app_state WHERE key='current_user'"
+    )
+    row = cursor.fetchone()
+    return row[0] if row else None
+
+
+# -----------------------------
+# 탈퇴 예약
+# -----------------------------
+def request_delete(user_id):
+    delete_date = (datetime.now() + timedelta(days=7)).isoformat()
+
+    cursor.execute(
+        "UPDATE users SET delete_at=? WHERE id=?",
+        (delete_date, user_id)
+    )
+    conn.commit()
+
+
+# -----------------------------
+# 앱 시작
+# -----------------------------
 def main(page: ft.Page):
     page.title = "리메지코드"
-    page.theme_mode = ft.ThemeMode.LIGHT
     page.vertical_alignment = "center"
     page.horizontal_alignment = "center"
 
     container = ft.Container(expand=True)
     page.add(container)
 
-    def show_message(title, message):
-        dialog = ft.AlertDialog(
-            title=ft.Text(title),
-            content=ft.Text(message)
-        )
-        page.open(dialog)
+    cleanup_deleted_users()
 
-    def change_view(view_name):
-        container.content = build_view(view_name)
+    # -----------------------------
+    # 알림
+    # -----------------------------
+    def alert(title, msg):
+        page.open(ft.AlertDialog(title=ft.Text(title), content=ft.Text(msg)))
+
+    # -----------------------------
+    # 화면 전환
+    # -----------------------------
+    def change_view(view):
+        container.content = build_view(view)
         page.update()
 
-    def build_view(view_name):
+    # -----------------------------
+    # 화면 구성
+    # -----------------------------
+    def build_view(view):
 
-        # -----------------------------
-        # 로고 화면
-        # -----------------------------
-        if view_name == "logo":
+        # -------------------------
+        # 로고
+        # -------------------------
+        if view == "logo":
+
+            def go(e):
+                if get_current_user():
+                    change_view("main")
+                else:
+                    change_view("login")
+
             return ft.GestureDetector(
                 content=ft.Column(
                     [
-                        ft.Text("리메지코드", size=40, weight=ft.FontWeight.BOLD),
-                        ft.Text("클릭하여 시작")
+                        ft.Text("리메지코드", size=40),
+                        ft.Text("클릭해서 시작")
                     ],
                     alignment="center",
                     horizontal_alignment="center"
                 ),
-                on_tap=lambda e: change_view(
-                    "main_dashboard"
-                    if page.client_storage.get("logged_in")
-                    else "login"
-                )
+                on_tap=go
             )
 
-        # -----------------------------
+        # -------------------------
         # 로그인
-        # -----------------------------
-        elif view_name == "login":
+        # -------------------------
+        elif view == "login":
 
             id_f = ft.TextField(label="아이디")
             pw_f = ft.TextField(label="비밀번호", password=True)
 
-            def login_check(e):
-
+            def login(e):
                 cursor.execute(
                     "SELECT * FROM users WHERE id=? AND password=?",
                     (id_f.value, pw_f.value)
                 )
-
                 user = cursor.fetchone()
 
                 if user:
-                    page.client_storage.set("logged_in", True)
-                    page.client_storage.set("user_id", id_f.value)
+                    # 탈퇴 예약 체크
+                    if user[3] is not None:
+                        alert("탈퇴 진행중", "이미 탈퇴 예약된 계정입니다.")
+                        return
 
-                    change_view("main_dashboard")
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO app_state(key,value) VALUES(?,?)",
+                        ("current_user", id_f.value)
+                    )
+                    conn.commit()
+
+                    change_view("main")
 
                 else:
-                    show_message(
-                        "로그인 실패",
-                        "아이디 또는 비밀번호가 올바르지 않습니다."
-                    )
+                    alert("로그인 실패", "아이디 또는 비밀번호 오류")
 
             return ft.Column(
                 [
                     ft.Text("로그인", size=30),
                     id_f,
                     pw_f,
-                    ft.ElevatedButton(
-                        "로그인",
-                        on_click=login_check
-                    ),
-                    ft.TextButton(
-                        "회원가입",
-                        on_click=lambda e: change_view("signup")
-                    )
+                    ft.ElevatedButton("로그인", on_click=login),
+                    ft.TextButton("회원가입", on_click=lambda e: change_view("signup"))
                 ],
                 alignment="center"
             )
 
-        # -----------------------------
+        # -------------------------
         # 회원가입
-        # -----------------------------
-        elif view_name == "signup":
+        # -------------------------
+        elif view == "signup":
 
             email_f = ft.TextField(label="이메일")
             id_f = ft.TextField(label="아이디")
             pw_f = ft.TextField(label="비밀번호", password=True)
 
             def register(e):
-
                 if not id_f.value or not pw_f.value:
-                    show_message(
-                        "오류",
-                        "아이디와 비밀번호를 입력하세요."
-                    )
+                    alert("오류", "필수 입력 누락")
                     return
 
-                cursor.execute(
-                    "SELECT id FROM users WHERE id=?",
-                    (id_f.value,)
-                )
-
+                cursor.execute("SELECT id FROM users WHERE id=?", (id_f.value,))
                 if cursor.fetchone():
-                    show_message(
-                        "중복 아이디",
-                        "이미 사용 중인 아이디입니다."
-                    )
+                    alert("오류", "이미 존재하는 아이디")
                     return
 
                 cursor.execute(
-                    """
-                    INSERT INTO users(id, password, email)
-                    VALUES(?,?,?)
-                    """,
-                    (
-                        id_f.value,
-                        pw_f.value,
-                        email_f.value
-                    )
+                    "INSERT INTO users(id,password,email) VALUES(?,?,?)",
+                    (id_f.value, pw_f.value, email_f.value)
                 )
-
                 conn.commit()
 
-                show_message(
-                    "회원가입 완료",
-                    "회원가입이 성공적으로 완료되었습니다."
-                )
-
-                change_view("welcome")
+                alert("완료", "회원가입 성공")
+                change_view("login")
 
             return ft.Column(
                 [
@@ -162,74 +197,51 @@ def main(page: ft.Page):
                     email_f,
                     id_f,
                     pw_f,
-                    ft.ElevatedButton(
-                        "가입하기",
-                        on_click=register
-                    )
+                    ft.ElevatedButton("가입하기", on_click=register)
                 ],
                 alignment="center"
             )
 
-        # -----------------------------
-        # 가입 완료
-        # -----------------------------
-        elif view_name == "welcome":
-            return ft.GestureDetector(
-                content=ft.Column(
-                    [
-                        ft.Text("환영합니다!", size=30),
-                        ft.Text("클릭하여 입장")
-                    ],
-                    alignment="center",
-                    horizontal_alignment="center"
-                ),
-                on_tap=lambda e: change_view("main_dashboard")
-            )
+        # -------------------------
+        # 메인
+        # -------------------------
+        elif view == "main":
 
-        # -----------------------------
-        # 메인 대시보드
-        # -----------------------------
-        elif view_name == "main_dashboard":
+            user = get_current_user()
 
-            user_id = page.client_storage.get("user_id")
+            def logout(e):
+                cursor.execute(
+                    "DELETE FROM app_state WHERE key='current_user'"
+                )
+                conn.commit()
+                change_view("login")
+
+            def delete_account(e):
+                request_delete(user)
+                logout(e)
 
             return ft.Column(
                 [
-                    ft.Text(
-                        "리메지코드 메인 화면",
-                        size=30
-                    ),
-                    ft.Text(
-                        f"{user_id}님 환영합니다."
-                    ),
+                    ft.Text("메인 화면", size=30),
+                    ft.Text(f"{user}님 환영합니다"),
+
+                    ft.ElevatedButton("로그아웃", on_click=logout),
+
                     ft.ElevatedButton(
-                        "로그아웃",
-                        on_click=logout
+                        "회원 탈퇴 (7일 후 삭제)",
+                        on_click=delete_account
                     )
                 ],
                 alignment="center"
             )
 
-        return ft.Text("로딩 중...")
-
-    # -----------------------------
-    # 로그아웃
-    # -----------------------------
-    def logout(e):
-        page.client_storage.set("logged_in", False)
-
-        try:
-            page.client_storage.remove("user_id")
-        except:
-            pass
-
-        change_view("login")
+        return ft.Text("로딩중")
 
     # -----------------------------
     # 시작 화면
     # -----------------------------
-    if page.client_storage.get("logged_in"):
-        change_view("main_dashboard")
+    if get_current_user():
+        change_view("main")
     else:
         change_view("logo")
 
