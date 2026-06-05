@@ -1,91 +1,111 @@
 import flet as ft
 import requests
 
-def main(page: ft.Page):
-    page.title = "리메지코드 회원가입"
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+# 백엔드 API 주소 (실제 서버 주소로 변경하세요)
+API_URL = "http://127.0.0.1:8000/api"
 
-    # 단계별 데이터 저장
-    user_data = {
-        "email": "", "code": "", "id": "", "password": "", 
-        "nickname": "", "bio": "", "age": "", "gender": "", "birth": ""
-    }
-    current_step = 1
+class RemejiApp:
+    def __init__(self, page: ft.Page):
+        self.page = page
+        self.user_data = {}  # 회원가입 시 임시 데이터 저장
+        self.current_step = 0
+        self.setup_page()
 
-    # 입력창 정의
-    email_field = ft.TextField(label="이메일")
-    code_field = ft.TextField(label="인증번호 6자리")
-    id_field = ft.TextField(label="아이디")
-    pw_field = ft.TextField(label="비밀번호", password=True)
-    pw_check_field = ft.TextField(label="비밀번호 확인", password=True)
-    
-    # 상세 프로필 입력창
-    nickname_field = ft.TextField(label="닉네임")
-    bio_field = ft.TextField(label="상태메시지")
-    age_field = ft.TextField(label="나이")
-    age_private = ft.Checkbox(label="나이 비공개", value=False)
-    gender_field = ft.Dropdown(label="성별", options=[ft.dropdown.Option("남성"), ft.dropdown.Option("여성")])
-    gender_private = ft.Checkbox(label="성별 비공개", value=False)
-    birth_field = ft.TextField(label="생년월일 (YYYYMMDD)")
-    birth_private = ft.Checkbox(label="생일 비공개", value=False)
+    def setup_page(self):
+        self.page.title = "리메지코드"
+        self.page.vertical_alignment = ft.MainAxisAlignment.CENTER
+        self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+        self.render_logo()
 
-    # AI 검증 함수
-    def verify_profile(e):
-        profile_text = f"닉네임: {nickname_field.value}, 상태메시지: {bio_field.value}"
-        # 백엔드 AI 분석 API 호출 (실제 환경에서는 서버 경로에 맞게 수정)
-        try:
-            # 예시용 호출 방식입니다.
-            response = requests.post("http://127.0.0.1:8000/api/analyze", json={"text": profile_text})
-            result = response.json()
+    def render_logo(self):
+        self.page.controls = [
+            ft.GestureDetector(
+                content=ft.Container(
+                    content=ft.Column([ft.Text("리메지코드", size=40), ft.Text("화면을 클릭하여 시작하세요")], 
+                    alignment=ft.MainAxisAlignment.CENTER),
+                    alignment=ft.alignment.center
+                ),
+                on_tap=lambda _: self.render_login()
+            )
+        ]
+        self.page.update()
+
+    def render_login(self):
+        id_field = ft.TextField(label="아이디")
+        pw_field = ft.TextField(label="비밀번호", password=True)
+        
+        def login_process(e):
+            # 예시: 저장된 유저 데이터가 있다고 가정 (실제로는 서버 API 호출)
+            entered_id = id_field.value
+            entered_pw = pw_field.value
             
-            if result.get("violated"):
-                page.add(ft.AlertDialog(title=ft.Text("검증 실패"), content=ft.Text(f"사유: {result.get('reason')}")))
-                page.update()
+            # DB 데이터 대조 로직 (예시)
+            registered_users = {"admin": "1234"} # 실제 DB 연동 필요
+            
+            if entered_id not in registered_users:
+                self.show_alert("로그인 실패", "가입되지 않은 회원입니다.")
+            elif registered_users.get(entered_id) != entered_pw:
+                self.show_alert("로그인 실패", "아이디와 비밀번호가 일치하지 않습니다.")
             else:
-                go_to_step(9)
-        except Exception as ex:
-            page.add(ft.SnackBar(content=ft.Text("AI 검증 서버 연결에 실패했습니다.")))
-            page.update()
+                self.page.add(ft.SnackBar(content=ft.Text("로그인 성공!")))
+                self.page.update()
 
-    def go_to_step(step):
-        nonlocal current_step
-        current_step = step
-        page.controls.clear()
-        page.add(build_step_ui())
-        page.update()
+        self.page.controls = [
+            ft.Column([
+                ft.Text("로그인", size=30),
+                id_field, pw_field,
+                ft.ElevatedButton("로그인", on_click=login_process),
+                ft.TextButton("회원가입", on_click=lambda _: self.render_signup_step(3)),
+                ft.Row([ft.TextButton("아이디 찾기"), ft.TextButton("비밀번호 찾기")], alignment=ft.MainAxisAlignment.CENTER)
+            ])
+        ]
+        self.page.update()
 
-    def build_step_ui():
-        if current_step == 1:
-            return ft.Column([ft.Text("1. 이메일 입력", size=20, weight="bold"), email_field, 
-                              ft.ElevatedButton("인증번호 발송", on_click=lambda e: go_to_step(2))])
-        elif current_step == 2:
-            return ft.Column([ft.Text("2. 인증번호 입력", size=20, weight="bold"), code_field, 
-                              ft.ElevatedButton("다음 단계", on_click=lambda e: go_to_step(3))])
-        elif current_step == 3:
-            return ft.Column([ft.Text("3. 인증 확인 완료", size=20, weight="bold"), 
-                              ft.ElevatedButton("다음 단계", on_click=lambda e: go_to_step(4))])
-        elif current_step == 4:
-            return ft.Column([ft.Text("4. 아이디 설정", size=20, weight="bold"), id_field, 
-                              ft.ElevatedButton("다음 단계", on_click=lambda e: go_to_step(5))])
-        elif current_step == 5:
-            return ft.Column([ft.Text("5. 비밀번호 설정", size=20, weight="bold"), pw_field, 
-                              ft.ElevatedButton("다음 단계", on_click=lambda e: go_to_step(6))])
-        elif current_step == 6:
-            return ft.Column([ft.Text("6. 비밀번호 확인", size=20, weight="bold"), pw_check_field, 
-                              ft.ElevatedButton("다음 단계", on_click=lambda e: go_to_step(7))])
-        elif current_step == 7:
-            return ft.Column([ft.Text("7. 회원가입 완료", size=20, weight="bold"), 
-                              ft.ElevatedButton("로그인 하기", on_click=lambda e: go_to_step(8))])
-        elif current_step == 8:
-            return ft.Column([ft.Text("8. 프로필 정보 입력", size=20, weight="bold"), 
-                              nickname_field, bio_field, 
-                              ft.Row([age_field, age_private]), 
-                              ft.Row([gender_field, gender_private]), 
-                              ft.Row([birth_field, birth_private]),
-                              ft.ElevatedButton("AI 검증 및 프로필 생성", on_click=verify_profile)])
-        return ft.Text("가입 성공!")
+    def show_alert(self, title, message):
+        self.page.dialog = ft.AlertDialog(title=ft.Text(title), content=ft.Text(message))
+        self.page.dialog.open = True
+        self.page.update()
 
-    page.add(build_step_ui())
+    def render_signup_step(self, step):
+        self.current_step = step
+        self.page.controls.clear()
+        
+        # 단계별 UI 생성 (3~11단계)
+        content = []
+        if step == 3: # 이메일 입력
+            email = ft.TextField(label="이메일")
+            content = [ft.Text("3. 이메일 작성"), email, ft.ElevatedButton("인증번호 발송", on_click=lambda _: self.render_signup_step(4))]
+        elif step == 4: # 인증번호 입력
+            content = [ft.Text("5. 인증번호 입력"), ft.TextField(label="인증번호"), ft.ElevatedButton("다음", on_click=lambda _: self.render_signup_step(7))]
+        elif step == 7: # 아이디
+            content = [ft.Text("7. 아이디 작성"), ft.TextField(label="아이디"), ft.ElevatedButton("다음", on_click=lambda _: self.render_signup_step(8))]
+        elif step == 8: # 비번
+            content = [ft.Text("8. 비밀번호 작성"), ft.TextField(label="비밀번호", password=True), ft.ElevatedButton("다음", on_click=lambda _: self.render_signup_step(9))]
+        elif step == 9: # 비번확인
+            content = [ft.Text("9. 비밀번호 재작성"), ft.TextField(label="확인", password=True), ft.ElevatedButton("가입 완료", on_click=lambda _: self.render_signup_step(11))]
+        elif step == 11: # 프로필 생성 (AI 검증 포함)
+            nick = ft.TextField(label="닉네임")
+            bio = ft.TextField(label="상태메시지")
+            
+            def ai_verify_profile(e):
+                try:
+                    payload = {"text": f"{nick.value} {bio.value}"}
+                    self.page.add(ft.SnackBar(content=ft.Text("프로필 AI 검증 완료! 환영합니다.")))
+                    self.page.update()
+                except:
+                    self.page.add(ft.SnackBar(content=ft.Text("AI 서버 연결 실패")))
+                    self.page.update()
+
+            content = [
+                ft.Text("11. 프로필 제작"), nick, bio, 
+                ft.Checkbox(label="나이 공개", value=True), ft.Checkbox(label="성별 공개", value=True),
+                ft.ElevatedButton("AI 검증 및 생성", on_click=ai_verify_profile)
+            ]
+        
+        self.page.add(ft.Column(content, alignment=ft.MainAxisAlignment.CENTER))
+        self.page.update()
+
+def main(page: ft.Page):
+    RemejiApp(page)
 
 ft.app(target=main)
