@@ -1,121 +1,91 @@
 import flet as ft
+import requests
 
 def main(page: ft.Page):
-    page.title = "Remezicode 앱"
-    page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 0
+    page.title = "리메지코드 회원가입"
+    page.vertical_alignment = ft.MainAxisAlignment.CENTER
+    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
-    # 1. AI 검증 로직 (금지어 체크)
-    def is_content_safe(text):
-        forbidden_words = ["바보", "나쁜말", "욕설"]
-        return not any(word in text for word in forbidden_words)
+    # 단계별 데이터 저장
+    user_data = {
+        "email": "", "code": "", "id": "", "password": "", 
+        "nickname": "", "bio": "", "age": "", "gender": "", "birth": ""
+    }
+    current_step = 1
 
-    # 2. 화면 이동 함수들
-    def go_to_signup(e):
-        page.clean()
-        page.add(signup_view)
-        page.update()
-
-    def go_to_profile(e):
-        page.clean()
-        page.add(profile_view)
-        page.update()
-
-    def go_to_login(e):
-        page.clean()
-        page.add(login_view)
-        page.update()
-
-    def go_to_main(e):
-        # AI 검증 수행
-        if not is_content_safe(nickname_field.value) or not is_content_safe(status_field.value):
-            page.show_snack_bar(ft.SnackBar(content=ft.Text("가이드라인을 준수해주세요! (부적절한 단어 포함)")))
-            return
-        page.clean()
-        page.add(tab_bar, home_view)
-        page.update()
-
-    # 3. 화면 구성 요소
-    # 로그인 화면
-    login_view = ft.Container(
-        content=ft.Column([
-            ft.Text("로그인", size=30, weight="bold"),
-            ft.TextField(label="아이디"),
-            ft.TextField(label="비밀번호", password=True),
-            ft.ElevatedButton("로그인", on_click=go_to_main, width=200),
-            ft.TextButton("회원가입하기", on_click=go_to_signup)
-        ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=40
-    )
-
-    # 회원가입 화면
-    signup_view = ft.Container(
-        content=ft.Column([
-            ft.Text("회원가입", size=30, weight="bold"),
-            ft.TextField(label="아이디"),
-            ft.TextField(label="이메일"),
-            ft.ElevatedButton("인증번호 발송", on_click=lambda _: print("인증번호 전송")),
-            ft.TextField(label="인증번호 6자리"),
-            ft.TextField(label="비밀번호", password=True),
-            ft.ElevatedButton("다음 단계", on_click=go_to_profile, width=200)
-        ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=40
-    )
-
-    # 프로필 설정 화면
+    # 입력창 정의
+    email_field = ft.TextField(label="이메일")
+    code_field = ft.TextField(label="인증번호 6자리")
+    id_field = ft.TextField(label="아이디")
+    pw_field = ft.TextField(label="비밀번호", password=True)
+    pw_check_field = ft.TextField(label="비밀번호 확인", password=True)
+    
+    # 상세 프로필 입력창
     nickname_field = ft.TextField(label="닉네임")
-    status_field = ft.TextField(label="상태 메시지")
-    profile_view = ft.Container(
-        content=ft.Column([
-            ft.Text("프로필 설정", size=30, weight="bold"),
-            ft.CircleAvatar(content=ft.Icon("person"), radius=50),
-            ft.ElevatedButton("프로필 사진 변경"),
-            nickname_field,
-            status_field,
-            ft.ElevatedButton("가입 완료 (AI 검증)", on_click=go_to_main, width=200)
-        ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=40
-    )
+    bio_field = ft.TextField(label="상태메시지")
+    age_field = ft.TextField(label="나이")
+    age_private = ft.Checkbox(label="나이 비공개", value=False)
+    gender_field = ft.Dropdown(label="성별", options=[ft.dropdown.Option("남성"), ft.dropdown.Option("여성")])
+    gender_private = ft.Checkbox(label="성별 비공개", value=False)
+    birth_field = ft.TextField(label="생년월일 (YYYYMMDD)")
+    birth_private = ft.Checkbox(label="생일 비공개", value=False)
 
-    # 4. 네비게이션 및 메인 화면
-    def tab_changed(e):
-        index = e.control.selected_index
-        page.clean()
-        page.add(tab_bar)
-        if index == 0:
-            page.add(home_view)
-        else:
-            page.add(mail_view)
+    # AI 검증 함수
+    def verify_profile(e):
+        profile_text = f"닉네임: {nickname_field.value}, 상태메시지: {bio_field.value}"
+        # 백엔드 AI 분석 API 호출 (실제 환경에서는 서버 경로에 맞게 수정)
+        try:
+            # 예시용 호출 방식입니다.
+            response = requests.post("http://127.0.0.1:8000/api/analyze", json={"text": profile_text})
+            result = response.json()
+            
+            if result.get("violated"):
+                page.add(ft.AlertDialog(title=ft.Text("검증 실패"), content=ft.Text(f"사유: {result.get('reason')}")))
+                page.update()
+            else:
+                go_to_step(9)
+        except Exception as ex:
+            page.add(ft.SnackBar(content=ft.Text("AI 검증 서버 연결에 실패했습니다.")))
+            page.update()
+
+    def go_to_step(step):
+        nonlocal current_step
+        current_step = step
+        page.controls.clear()
+        page.add(build_step_ui())
         page.update()
 
-    tab_bar = ft.NavigationBar(
-        selected_index=0,
-        on_change=tab_changed,
-        destinations=[
-            ft.NavigationBarDestination(icon="home", label="홈"),
-            ft.NavigationBarDestination(icon="mail", label="우체통"),
-        ],
-    )
+    def build_step_ui():
+        if current_step == 1:
+            return ft.Column([ft.Text("1. 이메일 입력", size=20, weight="bold"), email_field, 
+                              ft.ElevatedButton("인증번호 발송", on_click=lambda e: go_to_step(2))])
+        elif current_step == 2:
+            return ft.Column([ft.Text("2. 인증번호 입력", size=20, weight="bold"), code_field, 
+                              ft.ElevatedButton("다음 단계", on_click=lambda e: go_to_step(3))])
+        elif current_step == 3:
+            return ft.Column([ft.Text("3. 인증 확인 완료", size=20, weight="bold"), 
+                              ft.ElevatedButton("다음 단계", on_click=lambda e: go_to_step(4))])
+        elif current_step == 4:
+            return ft.Column([ft.Text("4. 아이디 설정", size=20, weight="bold"), id_field, 
+                              ft.ElevatedButton("다음 단계", on_click=lambda e: go_to_step(5))])
+        elif current_step == 5:
+            return ft.Column([ft.Text("5. 비밀번호 설정", size=20, weight="bold"), pw_field, 
+                              ft.ElevatedButton("다음 단계", on_click=lambda e: go_to_step(6))])
+        elif current_step == 6:
+            return ft.Column([ft.Text("6. 비밀번호 확인", size=20, weight="bold"), pw_check_field, 
+                              ft.ElevatedButton("다음 단계", on_click=lambda e: go_to_step(7))])
+        elif current_step == 7:
+            return ft.Column([ft.Text("7. 회원가입 완료", size=20, weight="bold"), 
+                              ft.ElevatedButton("로그인 하기", on_click=lambda e: go_to_step(8))])
+        elif current_step == 8:
+            return ft.Column([ft.Text("8. 프로필 정보 입력", size=20, weight="bold"), 
+                              nickname_field, bio_field, 
+                              ft.Row([age_field, age_private]), 
+                              ft.Row([gender_field, gender_private]), 
+                              ft.Row([birth_field, birth_private]),
+                              ft.ElevatedButton("AI 검증 및 프로필 생성", on_click=verify_profile)])
+        return ft.Text("가입 성공!")
 
-    home_view = ft.Container(
-        content=ft.Column([
-            ft.Text("오늘의 마음 나누기", size=20, weight="bold"),
-            ft.TextField(label="고민 입력", multiline=True, min_lines=3),
-            ft.ElevatedButton("글 등록", icon="send")
-        ], alignment=ft.MainAxisAlignment.CENTER),
-        padding=20
-    )
+    page.add(build_step_ui())
 
-    mail_view = ft.Container(
-        content=ft.Column([
-            ft.Text("내 우체통", size=20, weight="bold"),
-            ft.ListTile(leading=ft.Icon("email"), title=ft.Text("첫 번째 위로 편지")),
-        ], alignment=ft.MainAxisAlignment.CENTER),
-        padding=20
-    )
-
-    # 초기 앱 실행
-    page.add(login_view)
-
-if __name__ == "__main__":
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8080)
+ft.app(target=main)
