@@ -1,6 +1,7 @@
 import flet as ft
 import sqlite3
 from datetime import datetime, timedelta
+import re
 
 # -----------------------------
 # DB 설정
@@ -64,7 +65,25 @@ def request_delete(user_id):
 
 
 # -----------------------------
-# 앱
+# 입력 검증
+# -----------------------------
+def valid_email(email):
+    return email and "@" in email and "." in email
+
+def valid_id(user_id):
+    return user_id and len(user_id) >= 5 and re.search(r"[a-zA-Z]", user_id)
+
+def valid_password(pw):
+    return (
+        pw and len(pw) >= 9 and
+        re.search(r"[a-zA-Z]", pw) and
+        re.search(r"[0-9]", pw) and
+        re.search(r"[!@#$%^&*(),.?\":{}|<>]", pw)
+    )
+
+
+# -----------------------------
+# 앱 시작
 # -----------------------------
 def main(page: ft.Page):
     page.title = "리메지코드"
@@ -76,18 +95,27 @@ def main(page: ft.Page):
 
     cleanup_deleted_users()
 
+    # -----------------------------
+    # alert (안정 버전)
+    # -----------------------------
     def alert(title, msg):
-        page.open(ft.AlertDialog(title=ft.Text(title), content=ft.Text(msg)))
+        dialog = ft.AlertDialog(
+            title=ft.Text(title),
+            content=ft.Text(msg)
+        )
+        page.dialog = dialog
+        dialog.open = True
+        page.update()
 
     # -----------------------------
-    # 화면 전환 (핵심 수정)
+    # 화면 전환
     # -----------------------------
     def change_view(view):
         container.content = build_view(view)
-        container.update()   # ⭐ 핵심 수정 (page.update ❌)
+        page.update()
 
     # -----------------------------
-    # 화면
+    # 화면 구성
     # -----------------------------
     def build_view(view):
 
@@ -95,21 +123,26 @@ def main(page: ft.Page):
         if view == "logo":
 
             def go(e):
+                print("CLICK OK")
+
                 if get_current_user():
                     change_view("main")
                 else:
                     change_view("login")
 
-            return ft.GestureDetector(
-                content=ft.Column(
-                    [
-                        ft.Text("리메지코드", size=40),
-                        ft.Text("클릭해서 시작")
-                    ],
-                    alignment="center",
-                    horizontal_alignment="center"
-                ),
-                on_tap=go,   # ⭐ 추가 (중요)
+            return ft.Container(
+                expand=True,
+                alignment="center",   # ✅ 수정 (핵심)
+                content=ft.InkWell(
+                    on_tap=go,
+                    content=ft.Column(
+                        [
+                            ft.Text("리메지코드", size=40),
+                            ft.Text("클릭해서 시작")
+                        ],
+                        alignment="center"
+                    )
+                )
             )
 
         # ----------------- 로그인 -----------------
@@ -126,16 +159,11 @@ def main(page: ft.Page):
                 user = cursor.fetchone()
 
                 if user:
-                    if user[3] is not None:
-                        alert("탈퇴 진행중", "이미 탈퇴 예약된 계정입니다.")
-                        return
-
                     cursor.execute(
                         "INSERT OR REPLACE INTO app_state(key,value) VALUES(?,?)",
                         ("current_user", id_f.value)
                     )
                     conn.commit()
-
                     change_view("main")
                 else:
                     alert("로그인 실패", "아이디 또는 비밀번호 오류")
@@ -159,8 +187,17 @@ def main(page: ft.Page):
             pw_f = ft.TextField(label="비밀번호", password=True)
 
             def register(e):
-                if not id_f.value or not pw_f.value:
-                    alert("오류", "필수 입력 누락")
+
+                if not valid_email(email_f.value):
+                    alert("오류", "이메일 형식 오류")
+                    return
+
+                if not valid_id(id_f.value):
+                    alert("오류", "아이디는 영문 포함 5자 이상")
+                    return
+
+                if not valid_password(pw_f.value):
+                    alert("오류", "비밀번호는 영문/숫자/특수문자 9자 이상")
                     return
 
                 cursor.execute("SELECT id FROM users WHERE id=?", (id_f.value,))
@@ -194,9 +231,7 @@ def main(page: ft.Page):
             user = get_current_user()
 
             def logout(e):
-                cursor.execute(
-                    "DELETE FROM app_state WHERE key='current_user'"
-                )
+                cursor.execute("DELETE FROM app_state WHERE key='current_user'")
                 conn.commit()
                 change_view("login")
 
