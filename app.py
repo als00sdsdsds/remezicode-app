@@ -1,61 +1,81 @@
 import flet as ft
 
+# 유저 정보를 저장하는 임시 데이터베이스
+user_db = {}
+
 def main(page: ft.Page):
-page.title = "리메지코드"
-page.theme_mode = ft.ThemeMode.LIGHT
-page.vertical_alignment = ft.MainAxisAlignment.CENTER
-page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    page.title = "리메지코드"
+    page.theme_mode = ft.ThemeMode.LIGHT
+    page.vertical_alignment = "center"
+    page.horizontal_alignment = "center"
 
-container = ft.Container(expand=True)
-page.add(container)
+    container = ft.Container(expand=True)
+    page.add(container)
 
-def change_view(view_name):
-    container.content = build_view(view_name)
-    page.update()
+    def change_view(view_name):
+        container.content = build_view(view_name)
+        page.update()
 
-def build_view(view_name):
-    # 1. 로고 화면
-    if view_name == "logo":
-        return ft.GestureDetector(
-            content=ft.Column([ft.Text("리메지코드", size=40, weight="bold"), ft.Text("클릭하여 시작")], alignment="center", horizontal_alignment="center"),
-            on_tap=lambda e: change_view("login")
-        )
-    
-    # 2. 로그인 및 찾기 화면
-    elif view_name == "login":
-        id_f = ft.TextField(label="아이디")
-        pw_f = ft.TextField(label="비밀번호", password=True)
-        return ft.Column([
-            ft.Text("로그인", size=30), id_f, pw_f,
-            ft.ElevatedButton("로그인", on_click=lambda e: login_action(id_f.value, pw_f.value)),
-            ft.TextButton("회원가입", on_click=lambda e: change_view("signup_3")),
-            ft.Row([ft.TextButton("아이디 찾기"), ft.TextButton("비밀번호 찾기")], alignment="center")
-        ], alignment="center", horizontal_alignment="center")
-
-    # 3. 회원가입 과정
-    elif view_name == "signup_3":
-        return ft.Column([ft.Text("3. 이메일 작성"), ft.TextField(label="이메일"), ft.ElevatedButton("인증번호 발송", on_click=lambda e: change_view("signup_11"))], alignment="center")
-
-    # 11. 프로필 생성 및 AI 검증
-    elif view_name == "signup_11":
-        nick = ft.TextField(label="닉네임")
-        bio = ft.TextField(label="상태메시지")
-        def ai_verify(e):
-            page.show_snack_bar(ft.SnackBar(content=ft.Text("AI 검증 완료! 가입 성공")))
-        return ft.Column([
-            ft.Text("11. 프로필 제작"), nick, bio,
-            ft.Checkbox(label="나이 비공개"), ft.Checkbox(label="성별 비공개"), ft.Checkbox(label="생일 비공개"),
-            ft.ElevatedButton("AI 검증 및 완료", on_click=ai_verify)
-        ], alignment="center", horizontal_alignment="center")
+    def build_view(view_name):
+        if view_name == "logo":
+            return ft.GestureDetector(
+                content=ft.Column(
+                    [ft.Text("리메지코드", size=40, weight="bold"), ft.Text("클릭하여 시작")],
+                    alignment="center", horizontal_alignment="center"
+                ),
+                on_tap=lambda e: change_view("main_dashboard") if page.session.get("logged_in") else change_view("login")
+            )
         
-    return ft.Text("진행 중...")
+        elif view_name == "login":
+            id_f = ft.TextField(label="아이디")
+            pw_f = ft.TextField(label="비밀번호", password=True)
+            def login_check(e):
+                if id_f.value in user_db and user_db[id_f.value]["pw"] == pw_f.value:
+                    page.session.set("logged_in", True)
+                    change_view("main_dashboard")
+                else:
+                    page.show_dialog(ft.AlertDialog(title=ft.Text("알림"), content=ft.Text("아이디 또는 비밀번호가 틀렸습니다.")))
+            return ft.Column(
+                [
+                    ft.Text("로그인", size=30), id_f, pw_f,
+                    ft.ElevatedButton("로그인", on_click=login_check),
+                    ft.TextButton("회원가입", on_click=lambda e: change_view("signup"))
+                ], alignment="center"
+            )
 
-def login_action(uid, upw):
-    if uid == "user" and upw == "1234":
-        page.show_snack_bar(ft.SnackBar(content=ft.Text("로그인 성공!")))
+        elif view_name == "signup":
+            email_f = ft.TextField(label="이메일")
+            id_f = ft.TextField(label="아이디")
+            pw_f = ft.TextField(label="비밀번호", password=True)
+            def register(e):
+                user_db[id_f.value] = {"pw": pw_f.value, "email": email_f.value}
+                change_view("welcome")
+            return ft.Column([ft.Text("회원가입"), email_f, id_f, pw_f, ft.ElevatedButton("가입하기", on_click=register)], alignment="center")
+
+        elif view_name == "welcome":
+            return ft.GestureDetector(
+                content=ft.Column([ft.Text("환영합니다!", size=30), ft.Text("클릭하여 입장")], alignment="center"),
+                on_tap=lambda e: change_view("main_dashboard")
+            )
+
+        elif view_name == "main_dashboard":
+            page.session.set("logged_in", True)
+            return ft.Column(
+                [
+                    ft.Text("리메지코드 메인 화면", size=30),
+                    ft.ElevatedButton("로그아웃", on_click=lambda e: logout(e))
+                ], alignment="center"
+            )
+        return ft.Text("로딩 중...")
+
+    def logout(e):
+        page.session.set("logged_in", False)
+        change_view("login")
+
+    # 앱 실행 시 로그인 상태 확인
+    if page.session.get("logged_in"):
+        change_view("main_dashboard")
     else:
-        page.show_dialog(ft.AlertDialog(title=ft.Text("오류"), content=ft.Text("아이디 또는 비밀번호가 틀렸습니다.")))
-    page.update()
+        change_view("logo")
 
-change_view("logo")
 ft.app(target=main)
