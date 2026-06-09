@@ -90,9 +90,6 @@ def main(page: ft.Page):
     page.vertical_alignment = "center"
     page.horizontal_alignment = "center"
 
-    container = ft.Container(expand=True)
-    page.add(container)
-
     cleanup_deleted_users()
 
     # -----------------------------
@@ -111,8 +108,9 @@ def main(page: ft.Page):
     # 화면 전환
     # -----------------------------
     def change_view(view):
-        container.content = build_view(view)
-        page.update()
+        page.controls.clear()
+        page.add(build_view(view))
+        page.update()  
 
     # -----------------------------
     # 화면 구성
@@ -121,10 +119,8 @@ def main(page: ft.Page):
 
         # ----------------- 로고 -----------------
         if view == "logo":
-
             def go(e):
                 print("CLICK OK")
-
                 if get_current_user():
                     change_view("main")
                 else:
@@ -132,22 +128,23 @@ def main(page: ft.Page):
 
             return ft.Container(
                 expand=True,
-                alignment="center",   # ✅ 수정 (핵심)
-                content=ft.InkWell(
+                alignment=ft.Alignment(0, 0), # 확실한 중앙 정렬
+                content=ft.GestureDetector(
                     on_tap=go,
                     content=ft.Column(
                         [
-                            ft.Text("리메지코드", size=40),
-                            ft.Text("클릭해서 시작")
+                            ft.Text("리메지코드", size=40, weight=ft.FontWeight.BOLD),
+                            ft.Text("클릭해서 시작", size=16)
                         ],
-                        alignment="center"
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=20
                     )
                 )
             )
 
         # ----------------- 로그인 -----------------
         elif view == "login":
-
             id_f = ft.TextField(label="아이디")
             pw_f = ft.TextField(label="비밀번호", password=True)
 
@@ -168,6 +165,7 @@ def main(page: ft.Page):
                 else:
                     alert("로그인 실패", "아이디 또는 비밀번호 오류")
 
+            # ⭐ 정렬 문법 오류 대문자로 전면 보정
             return ft.Column(
                 [
                     ft.Text("로그인", size=30),
@@ -176,42 +174,59 @@ def main(page: ft.Page):
                     ft.ElevatedButton("로그인", on_click=login),
                     ft.TextButton("회원가입", on_click=lambda e: change_view("signup"))
                 ],
-                alignment="center"
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
             )
 
         # ----------------- 회원가입 -----------------
         elif view == "signup":
-
             email_f = ft.TextField(label="이메일")
             id_f = ft.TextField(label="아이디")
             pw_f = ft.TextField(label="비밀번호", password=True)
 
             def register(e):
-
+                # 1. 이메일 검증
                 if not valid_email(email_f.value):
-                    alert("오류", "이메일 형식 오류")
+                    alert(
+                        "이메일 형식 오류", 
+                        "올바른 이메일 주소를 입력해 주세요.\n예: remezi@example.com"
+                    )
                     return
 
+                # 2. 아이디 검증
                 if not valid_id(id_f.value):
-                    alert("오류", "아이디는 영문 포함 5자 이상")
+                    alert(
+                        "아이디 조건 미달", 
+                        "아이디는 반드시 영문(영어)을 하나 이상 포함하여 총 5자 이상으로 만들어야 합니다."
+                    )
                     return
 
+                # 3. 비밀번호 검증
                 if not valid_password(pw_f.value):
-                    alert("오류", "비밀번호는 영문/숫자/특수문자 9자 이상")
+                    alert(
+                        "비밀번호 조건 미달", 
+                        "보안을 위해 비밀번호는 아래 조건을 만족해야 합니다:\n"
+                        "• 총 9자 이상\n"
+                        "• 영문(영어) 포함\n"
+                        "• 숫자 포함\n"
+                        "• 특수문자(!@#$%^&* 등) 포함"
+                    )
                     return
 
+                # 4. 중복 아이디 체크
                 cursor.execute("SELECT id FROM users WHERE id=?", (id_f.value,))
                 if cursor.fetchone():
-                    alert("오류", "이미 존재하는 아이디")
+                    alert("가입 실패", "이미 누군가 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요.")
                     return
 
+                # 모든 검증 통과 시 DB 저장
                 cursor.execute(
                     "INSERT INTO users(id,password,email) VALUES(?,?,?)",
                     (id_f.value, pw_f.value, email_f.value)
                 )
                 conn.commit()
 
-                alert("완료", "회원가입 성공")
+                alert("가입 성공", f"{id_f.value}님, 리메지코드의 회원이 되신 것을 환영합니다!")
                 change_view("login")
 
             return ft.Column(
@@ -222,12 +237,12 @@ def main(page: ft.Page):
                     pw_f,
                     ft.ElevatedButton("가입하기", on_click=register)
                 ],
-                alignment="center"
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
             )
 
         # ----------------- 메인 -----------------
         elif view == "main":
-
             user = get_current_user()
 
             def logout(e):
@@ -239,6 +254,7 @@ def main(page: ft.Page):
                 request_delete(user)
                 logout(e)
 
+            # ⭐ 정렬 문법 오류 대문자로 전면 보정
             return ft.Column(
                 [
                     ft.Text("메인 화면", size=30),
@@ -246,7 +262,8 @@ def main(page: ft.Page):
                     ft.ElevatedButton("로그아웃", on_click=logout),
                     ft.ElevatedButton("회원 탈퇴 (7일 후 삭제)", on_click=delete_account)
                 ],
-                alignment="center"
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
             )
 
         return ft.Text("로딩중")
@@ -260,4 +277,4 @@ def main(page: ft.Page):
         change_view("logo")
 
 
-ft.app(target=main)
+ft.app(target=main, view=ft.AppView.WEB_BROWSER)

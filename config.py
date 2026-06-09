@@ -1,7 +1,11 @@
 import os
+from dotenv import load_dotenv
 
-# 🚨 본인의 제미나이 API 키가 있다면 "YOUR_GEMINI_API_KEY_HERE" 부분에 붙여넣어 주세요!
-GOOGLE_API_KEY = "YOUR_GEMINI_API_KEY_HERE"
+# .env 파일에 저장된 환경변수(GOOGLE_API_KEY)를 읽어옵니다.
+load_dotenv()
+
+# 환경변수에서 구글 API 키를 가져옵니다. (없으면 나중에 채워넣을 기본 텍스트 유지)
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GEMINI_API_KEY_HERE")
 
 # 🛡️ 리메지코드 AI 보안관의 정교한 가이드라인 가이드북
 AI_SYSTEM_INSTRUCTION = """

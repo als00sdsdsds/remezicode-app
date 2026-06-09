@@ -7,7 +7,7 @@ from config import GOOGLE_API_KEY, AI_SYSTEM_INSTRUCTION
 from database import get_db
 import models
 
-router = APIRouter(prefix="/api", tags=["Community"])
+router = APIRouter(tags=["Community"])
 
 # 제미나이 AI 초기화 세팅
 genai.configure(api_key=GOOGLE_API_KEY)
